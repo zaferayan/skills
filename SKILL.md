@@ -1,3 +1,8 @@
+---
+name: expo-mobile-app
+description: Expo React Native mobile app development with RevenueCat payments, AdMob ads, i18n localization, onboarding flow, paywall, and NativeTabs navigation
+---
+
 # Expo Mobile Application Development Guide
 
 > **IMPORTANT**: This is a SKILL file, NOT a project. NEVER run npm/bun install in this folder. NEVER create code files here. When creating a new project, ALWAYS ask the user for the project path first or create it in a separate directory (e.g., `~/Projects/app-name`).
@@ -12,7 +17,7 @@ When creating a new Expo project, you MUST include ALL of the following:
 
 - [ ] `src/app/onboarding.tsx` - Swipe-based onboarding with fullscreen background video and gradient overlay
 - [ ] `src/app/paywall.tsx` - RevenueCat paywall screen (shown after onboarding)
-- [ ] `src/app/settings.tsx` - Settings screen with language, theme, notifications options
+- [ ] `src/app/settings.tsx` - Settings screen with language, theme, notifications, and reset onboarding options
 
 ### Onboarding Video Implementation (REQUIRED)
 
@@ -22,7 +27,7 @@ The onboarding screen MUST have a fullscreen background video. Use a URL, not a 
 import { useVideoPlayer, VideoView } from "expo-video";
 
 const VIDEO_URL =
-  "http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4";
+  "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4";
 
 const player = useVideoPlayer(VIDEO_URL, (player) => {
   player.loop = true;
@@ -116,32 +121,65 @@ Do NOT skip this configuration or the app will crash with `GADInvalidInitializat
 
 ### Banner Ad Implementation (REQUIRED)
 
-You MUST implement banner ads in the app. Use this pattern:
+You MUST implement banner ads in the Tab layout. Use this pattern:
 
 ```tsx
-import {
-  BannerAd,
-  BannerAdSize,
-  TestIds,
-} from "react-native-google-mobile-ads";
+import { View, StyleSheet } from 'react-native';
+import { NativeTabs } from 'expo-router/unstable-native-tabs';
+import { useTranslation } from 'react-i18next';
+import { BannerAd, BannerAdSize, TestIds } from 'react-native-google-mobile-ads';
+import { useAds } from '@/context/ads-context';
 
 const adUnitId = __DEV__
   ? TestIds.BANNER
-  : "ca-app-pub-xxxxxxxxxxxxxxxx/yyyyyyyyyy";
+  : 'ca-app-pub-xxxxxxxxxxxxxxxx/yyyyyyyyyy';
 
-// In render:
-<BannerAd
-  unitId={adUnitId}
-  size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER}
-  requestOptions={{
-    requestNonPersonalizedAdsOnly: true,
-  }}
-/>;
+export default function TabLayout() {
+  const { t } = useTranslation();
+  const { shouldShowAds } = useAds();
+
+  return (
+    <View style={styles.container}>
+      <NativeTabs>
+        <NativeTabs.Trigger name="index">
+          <NativeTabs.Trigger.Label>{t('tabs.home')}</NativeTabs.Trigger.Label>
+          <NativeTabs.Trigger.Icon sf="house.fill" md="home" />
+        </NativeTabs.Trigger>
+        <NativeTabs.Trigger name="settings">
+          <NativeTabs.Trigger.Label>{t('tabs.settings')}</NativeTabs.Trigger.Label>
+          <NativeTabs.Trigger.Icon sf="gear" md="settings" />
+        </NativeTabs.Trigger>
+      </NativeTabs>
+
+      {shouldShowAds && (
+        <View style={styles.adContainer}>
+          <BannerAd
+            unitId={adUnitId}
+            size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER}
+            requestOptions={{
+              requestNonPersonalizedAdsOnly: true,
+            }}
+          />
+        </View>
+      )}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+  adContainer: {
+    alignItems: 'center',
+    paddingBottom: 10,
+  },
+});
 ```
 
 - ALWAYS use `TestIds.BANNER` in development
-- Place banner ads at the bottom of main screens
-- Hide banner ads for premium users
+- Banner ad is placed below NativeTabs in the Tab layout
+- Use `useAds` context to check `shouldShowAds` (hides for premium users)
 
 ### TURKISH LOCALIZATION (IMPORTANT)
 
@@ -318,8 +356,7 @@ project-root/
 │   │   └── ads-context.tsx
 │   ├── hooks/
 │   │   ├── use-notifications.ts
-│   │   ├── use-color-scheme.ts
-│   │   └── use-interstitial-ad.ts
+│   │   └── use-color-scheme.ts
 │   ├── lib/
 │   │   ├── notifications.ts
 │   │   ├── purchases.ts
@@ -417,7 +454,7 @@ eas submit --platform android
 
 ### AdMob
 
-- Files: `src/lib/ads.ts`, `src/hooks/use-interstitial-ad.ts`
+- File: `src/lib/ads.ts`
 - Ads disabled for premium users
 - Test IDs must be used in development
 
@@ -426,13 +463,101 @@ eas submit --platform android
 - Files: `src/lib/notifications.ts`, `src/hooks/use-notifications.ts`
 - iOS requires push notification entitlement
 
-### Onboarding
+### Onboarding & Paywall Flow (CRITICAL)
 
-- File: `src/app/onboarding.tsx`
-- Swipe-based screens
-- Fullscreen background video
-- Gradient overlay
-- Redirects to paywall after completion
+- Files: `src/app/onboarding.tsx`, `src/app/paywall.tsx`
+- Swipe-based screens with fullscreen background video
+- Gradient overlay on video
+- **IMPORTANT**: Paywall MUST appear immediately after onboarding completes
+
+```tsx
+// In onboarding.tsx - when user completes onboarding:
+const handleComplete = async () => {
+  await setOnboardingCompleted(true);
+  router.replace('/paywall'); // Navigate to paywall immediately
+};
+```
+
+```tsx
+// In paywall.tsx - after purchase or skip:
+const handleContinue = () => {
+  router.replace('/(tabs)'); // Navigate to main app
+};
+```
+
+Flow: `Onboarding → Paywall → Main App (tabs)`
+
+### Paywall Subscription Options (REQUIRED)
+
+Paywall MUST have two subscription options:
+
+1. **Weekly** - Default option
+2. **Yearly** - With "50% OFF" badge (recommended, should be highlighted)
+
+```tsx
+// Subscription option component example:
+const subscriptionOptions = [
+  {
+    id: 'weekly',
+    title: t('paywall.weekly'),
+    price: '$4.99/week',
+    selected: selectedPlan === 'weekly',
+  },
+  {
+    id: 'yearly',
+    title: t('paywall.yearly'),
+    price: '$129.99/year',
+    badge: '50% OFF',
+    selected: selectedPlan === 'yearly',
+  },
+];
+
+// Yearly option should be visually highlighted as the best value
+```
+
+- Yearly option should show the discount badge prominently
+- Default selection can be weekly, but yearly should be visually recommended
+- Use RevenueCat package identifiers to match these options
+
+### Settings Screen Options (REQUIRED)
+
+Settings screen MUST include:
+
+1. **Language** - Change app language
+2. **Theme** - Light/Dark/System
+3. **Notifications** - Enable/disable notifications
+4. **Remove Ads** - Navigate to paywall (hidden if already premium)
+5. **Reset Onboarding** - Restart onboarding flow (for testing/demo)
+
+```tsx
+const { isPremium } = usePurchases();
+
+// Remove Ads - navigates to paywall
+const handleRemoveAds = () => {
+  router.push('/paywall');
+};
+
+// Reset onboarding
+const handleResetOnboarding = async () => {
+  await setOnboardingCompleted(false);
+  router.replace('/onboarding');
+};
+
+// In settings list:
+{!isPremium && (
+  <SettingsItem
+    title={t('settings.removeAds')}
+    icon="crown.fill"
+    onPress={handleRemoveAds}
+  />
+)}
+
+<SettingsItem
+  title={t('settings.resetOnboarding')}
+  icon="arrow.counterclockwise"
+  onPress={handleResetOnboarding}
+/>
+```
 
 ## Localization
 
@@ -458,6 +583,19 @@ eas submit --platform android
     </AdsProvider>
   </OnboardingProvider>
 </ThemeProvider>
+```
+
+## useColorScheme Hook
+
+File: `src/hooks/use-color-scheme.ts`
+
+```tsx
+import { useThemeContext } from '@/context/theme-context';
+
+export function useColorScheme(): 'light' | 'dark' | 'unspecified' {
+  const { isDark } = useThemeContext();
+  return isDark ? 'dark' : 'light';
+}
 ```
 
 ## Important Notes

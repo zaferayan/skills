@@ -1,5 +1,5 @@
 ---
-name: expo-mobile-app
+name: zafer-skills
 description: Expo React Native mobile app development with RevenueCat payments, AdMob ads, i18n localization, onboarding flow, paywall, and NativeTabs navigation
 ---
 

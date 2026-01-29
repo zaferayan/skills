@@ -35,6 +35,13 @@ After installing, simply ask Claude Code:
 /zafer-skills Create a water reminder app
 ```
 
+Claude will automatically:
+- Set up the project structure
+- Configure RevenueCat and AdMob
+- Create onboarding with video background
+- Build paywall with subscription options
+- Add settings with language, theme, and reset options
+
 ## Tech Stack
 
 - Expo SDK
